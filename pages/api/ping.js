@@ -13,7 +13,7 @@ export default async function Ping(req, res) {
               ip: `${subnet}.${i}`,
               status: 'Offline',
               responseTime: null,
-              hostname: '',
+              hostname: null,
             });
           } else {
             dns.reverse(`${subnet}.${i}`, (err, hostnames) => {

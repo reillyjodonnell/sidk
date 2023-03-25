@@ -195,3 +195,21 @@ table tbody td {
     transform: translateX(-100%);
   }
 } */
+
+.online {
+  background-color: #5eeb5b;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 5px;
+}
+
+.offline {
+  background-color: #ff1b1c;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 5px;
+}

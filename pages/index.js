@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { sortData } from './utils';
 import Skeleton from 'react-loading-skeleton';
@@ -9,11 +9,17 @@ export default function Home() {
   const [ipRange, setIpRange] = useState(10);
   const [pingResults, setPingResults] = useState([]);
   const [sortDirection, setSortDirection] = useState({
-    property: '',
+    property: 'ip',
     direction: 'asc',
   });
   const [loading, setLoading] = useState(false);
   const [pinged, setPinged] = useState(false);
+
+  useEffect(() => {
+    if (pinged) {
+      setPingResults(sortData(pingResults, 'ip', 'asc'));
+    }
+  }, [pinged]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,6 +43,19 @@ export default function Home() {
     setPingResults(sortData(pingResults, property, direction));
   };
 
+  // Helper function to render an arrow icon
+  const renderSortArrow = (property) => {
+    if (sortDirection.property === property) {
+      if (sortDirection.direction === 'asc') {
+        return <span>&uarr;</span>;
+      } else {
+        return <span>&darr;</span>;
+      }
+    } else {
+      return null;
+    }
+  };
+
   return (
     <div>
       <h1>Subnet Pinger</h1>
@@ -45,7 +64,7 @@ export default function Home() {
           Subnet:
           <input
             type="text"
-            value={subnet}
+            value={subnet.toString()}
             onChange={(e) => setSubnet(e.target.value)}
             placeholder="192.168.1"
           />
@@ -54,7 +73,7 @@ export default function Home() {
           IP Range:
           <input
             type="number"
-            value={ipRange}
+            value={ipRange.toString()}
             onChange={(e) => setIpRange(parseInt(e.target.value, 10))}
             min="1"
             max="255"
@@ -90,6 +109,7 @@ export default function Home() {
                           style={{ borderRadius: '4px' }}
                         />
                       </td>
+
                       <td>
                         <Skeleton
                           width={100}
@@ -129,27 +149,43 @@ export default function Home() {
               <table>
                 <thead>
                   <tr>
-                    <th onClick={() => handleSort('ip')}>IP Address</th>
-                    <th onClick={() => handleSort('responseTime')}>
-                      Response Time
+                    <th onClick={() => handleSort('ip')}>
+                      IP Address {renderSortArrow('ip')}
                     </th>
-                    <th onClick={() => handleSort('status')}>Status</th>
-                    <th onClick={() => handleSort('hostname')}>Hostname</th>
+                    <th onClick={() => handleSort('responseTime')}>
+                      Response Time {renderSortArrow('responseTime')}
+                    </th>
+                    <th onClick={() => handleSort('status')}>
+                      Status {renderSortArrow('status')}
+                    </th>
+                    <th onClick={() => handleSort('hostname')}>
+                      Hostname {renderSortArrow('hostname')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pingResults.map((result, index) => (
-                    <tr key={index}>
-                      <td>{result.ip}</td>
-                      <td>
-                        {result.responseTime !== null
-                          ? `${result.responseTime} ms`
-                          : '-'}
-                      </td>
-                      <td>{result.status}</td>
-                      <td>{result.hostname}</td>
-                    </tr>
-                  ))}
+                  {pingResults.map((result, index) => {
+                    return (
+                      <tr key={index}>
+                        <td>{result.ip}</td>
+                        <td>
+                          {result.responseTime !== null
+                            ? `${result.responseTime} ms`
+                            : '-'}
+                        </td>
+                        <td>
+                          {result.status}
+                          <span
+                            style={{ marginLeft: 3 }}
+                            className={
+                              result.status === 'Online' ? 'online' : 'offline'
+                            }
+                          ></span>
+                        </td>
+                        <td>{result.hostname ? result.hostname : '-'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
