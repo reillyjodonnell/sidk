@@ -1,0 +1,47 @@
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: Arial, sans-serif;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+form {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+form label {
+  margin-right: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table thead th {
+  cursor: pointer;
+  background-color: #f2f2f2;
+  font-weight: bold;
+  padding: 1rem;
+  text-align: left;
+}
+
+table tbody tr:nth-child(even) {
+  background-color: #f8f8f8;
+}
+
+table tbody tr:hover {
+  background-color: #e8e8e8;
+}
+
+table tbody td {
+  padding: 1rem;
+  border-top: 1px solid #e0e0e0;
+}
