@@ -62,6 +62,7 @@ async function pingSubnet({ subnet, subnetMask }) {
     return new Promise((resolve, reject) => {
       const start = performance.now();
       exec(`ping -c 1 ${ip}`, (error, stdout, stderr) => {
+        const stop = performance.now();
         if (error) {
           resolve({
             ip: ip,
@@ -82,11 +83,11 @@ async function pingSubnet({ subnet, subnetMask }) {
               const output = stdout.toString();
               const match = output.match(/name = ([^\s]+)/i);
               const hostname = match ? match[1] : null;
-
+              const responseTime = Math.round(stop - start);
               const dns = {
                 ip: ip,
                 status: 'Online',
-                responseTime: null,
+                responseTime,
                 hostname: hostname,
               };
               resolve(dns);
