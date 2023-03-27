@@ -177,38 +177,16 @@ function getLastUsableIP(subnet, subnetMask) {
   return ipNumberToString(lastUsableIPNumber);
 }
 
+import ping from 'ping';
+
 function pingIP(ip) {
   return new Promise((resolve, reject) => {
-    const start = performance.now();
-    const ping = spawn('ping', ['-c', '1', '-a', ip]);
-    let stdout = '';
-    let stderr = '';
-    ping.stdout.on('data', (data) => (stdout += data.toString()));
-    ping.stderr.on('data', (data) => (stderr += data.toString()));
-    ping.on('error', (err) => {
-      const result = {
-        ip: ip,
-        status: 'Offline',
-        responseTime: null,
-        hostname: null,
-      };
-      resolve(result);
-    });
-    ping.on('close', (code) => {
-      const stop = performance.now();
-      if (code === 0) {
-        const match = stdout.match(/from\s(.+):\s/i);
-        const hostname = match ? match[1] : null;
-        const responseTime = Math.round(stop - start);
-        if (!net.isIP(ip) && hostname !== null) {
-          const result = {
-            ip: ip,
-            status: 'Online',
-            responseTime: responseTime,
-            hostname: hostname,
-          };
-          resolve(result);
-        } else {
+    const start = process.hrtime.bigint();
+    ping.sys.probe(ip, (isAlive) => {
+      const stop = process.hrtime.bigint();
+      const responseTime = Number(stop - start) / 1e6; // Convert to milliseconds
+      if (isAlive) {
+        if (net.isIP(ip)) {
           dns.reverse(ip, (err, hostnames) => {
             if (err || !hostnames || hostnames.length === 0) {
               const result = {
@@ -228,6 +206,14 @@ function pingIP(ip) {
               resolve(result);
             }
           });
+        } else {
+          const result = {
+            ip: ip,
+            status: 'Online',
+            responseTime: responseTime,
+            hostname: null,
+          };
+          resolve(result);
         }
       } else {
         const result = {

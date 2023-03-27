@@ -116,7 +116,9 @@ export default function Home() {
             placeholder="255.255.255.0"
           />
         </label>
-        <button type="submit">Ping</button>
+        <button disabled={!subnet} type="submit">
+          Ping
+        </button>
       </form>
       <div>
         {pinged ? (
