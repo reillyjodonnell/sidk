@@ -1,5 +1,7 @@
 import { exec } from 'child_process';
-
+import { spawn } from 'child_process';
+import dns from 'dns';
+import net from 'net';
 export default async function Ping(req, res) {
   if (req.method === 'POST') {
     const { subnet, subnetMask = null } = req.body;
@@ -27,77 +29,6 @@ async function pingSubnet({ subnet, subnetMask }) {
     .reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
   const numIPAddresses = ~subnetMaskInt + 1 - 2;
 
-  // Calculate the first usable IP address in the subnet
-  function ipStringToNumber(ipString) {
-    const octets = ipString.split('.').map(Number);
-    return (octets[0] << 24) + (octets[1] << 16) + (octets[2] << 8) + octets[3];
-  }
-
-  function ipNumberToString(ipNumber) {
-    return [
-      (ipNumber >>> 24) & 255,
-      (ipNumber >>> 16) & 255,
-      (ipNumber >>> 8) & 255,
-      ipNumber & 255,
-    ].join('.');
-  }
-
-  function getFirstUsableIP(subnet, subnetMask) {
-    const subnetNumber = ipStringToNumber(subnet);
-    const subnetMaskNumber = ipStringToNumber(subnetMask);
-    const firstUsableIPNumber = (subnetNumber & subnetMaskNumber) + 1;
-    return ipNumberToString(firstUsableIPNumber);
-  }
-
-  function getLastUsableIP(subnet, subnetMask) {
-    const subnetNumber = ipStringToNumber(subnet);
-    const subnetMaskNumber = ipStringToNumber(subnetMask);
-    const broadcastAddressNumber =
-      (subnetNumber & subnetMaskNumber) + (~subnetMaskNumber & 0xffffffff);
-    const lastUsableIPNumber = broadcastAddressNumber - 1;
-    return ipNumberToString(lastUsableIPNumber);
-  }
-
-  const pingIP = (ip) => {
-    return new Promise((resolve, reject) => {
-      const start = performance.now();
-      exec(`ping -c 1 ${ip}`, (error, stdout, stderr) => {
-        const stop = performance.now();
-        if (error) {
-          resolve({
-            ip: ip,
-            status: 'Offline',
-            responseTime: null,
-            hostname: null,
-          });
-        } else {
-          exec(`nslookup ${ip}`, (err, stdout, stderr) => {
-            if (err) {
-              resolve({
-                ip: ip,
-                status: 'Online',
-                responseTime: null,
-                hostname: null,
-              });
-            } else {
-              const output = stdout.toString();
-              const match = output.match(/name = ([^\s]+)/i);
-              const hostname = match ? match[1] : null;
-              const responseTime = Math.round(stop - start);
-              const dns = {
-                ip: ip,
-                status: 'Online',
-                responseTime,
-                hostname: hostname,
-              };
-              resolve(dns);
-            }
-          });
-        }
-      });
-    });
-  };
-
   // Calculate the first and last usable IP addresses in the subnet
   const firstUsableIP = getFirstUsableIP(validSubnet, validSubnetMask);
   const lastUsableIP = getLastUsableIP(validSubnet, validSubnetMask);
@@ -115,16 +46,25 @@ async function pingSubnet({ subnet, subnetMask }) {
     promises.push(pingIP(ip));
   }
 
-  const concurrency = 10;
-  const chunks = Array.from(
-    Array(Math.ceil(promises.length / concurrency)),
-    (_, i) => promises.slice(i * concurrency, i * concurrency + concurrency)
-  );
-  const results = (
-    await Promise.all(chunks.map((chunk) => Promise.all(chunk)))
-  ).flat();
+  // Parallelize the promises using Promise.allSettled
+  const results = await Promise.allSettled(promises);
 
-  return results;
+  return results.map((result) => {
+    if (result.status === 'fulfilled') {
+      return result.value;
+    } else {
+      // Handle rejected promises here
+      console.log(
+        `Failed to ping IP ${result.reason.ip}: ${result.reason.message}`
+      );
+      return {
+        ip: result.reason.ip,
+        status: 'Offline',
+        responseTime: null,
+        hostname: null,
+      };
+    }
+  });
 }
 
 function cidrToSubnetAndSubnetMask(subnetInput, subnetMaskInput) {
@@ -204,4 +144,100 @@ function cidrToSubnetAndSubnetMask(subnetInput, subnetMaskInput) {
   const validSubnetString = validSubnetOctets.join('.');
   const validSubnetMask = maskString;
   return { subnet: validSubnetString, subnetMask: validSubnetMask };
+}
+
+// Calculate the first usable IP address in the subnet
+function ipStringToNumber(ipString) {
+  const octets = ipString.split('.').map(Number);
+  return (octets[0] << 24) + (octets[1] << 16) + (octets[2] << 8) + octets[3];
+}
+
+function ipNumberToString(ipNumber) {
+  return [
+    (ipNumber >>> 24) & 255,
+    (ipNumber >>> 16) & 255,
+    (ipNumber >>> 8) & 255,
+    ipNumber & 255,
+  ].join('.');
+}
+
+function getFirstUsableIP(subnet, subnetMask) {
+  const subnetNumber = ipStringToNumber(subnet);
+  const subnetMaskNumber = ipStringToNumber(subnetMask);
+  const firstUsableIPNumber = (subnetNumber & subnetMaskNumber) + 1;
+  return ipNumberToString(firstUsableIPNumber);
+}
+
+function getLastUsableIP(subnet, subnetMask) {
+  const subnetNumber = ipStringToNumber(subnet);
+  const subnetMaskNumber = ipStringToNumber(subnetMask);
+  const broadcastAddressNumber =
+    (subnetNumber & subnetMaskNumber) + (~subnetMaskNumber & 0xffffffff);
+  const lastUsableIPNumber = broadcastAddressNumber - 1;
+  return ipNumberToString(lastUsableIPNumber);
+}
+
+function pingIP(ip) {
+  return new Promise((resolve, reject) => {
+    const start = performance.now();
+    const ping = spawn('ping', ['-c', '1', '-a', ip]);
+    let stdout = '';
+    let stderr = '';
+    ping.stdout.on('data', (data) => (stdout += data.toString()));
+    ping.stderr.on('data', (data) => (stderr += data.toString()));
+    ping.on('error', (err) => {
+      const result = {
+        ip: ip,
+        status: 'Offline',
+        responseTime: null,
+        hostname: null,
+      };
+      resolve(result);
+    });
+    ping.on('close', (code) => {
+      const stop = performance.now();
+      if (code === 0) {
+        const match = stdout.match(/from\s(.+):\s/i);
+        const hostname = match ? match[1] : null;
+        const responseTime = Math.round(stop - start);
+        if (!net.isIP(ip) && hostname !== null) {
+          const result = {
+            ip: ip,
+            status: 'Online',
+            responseTime: responseTime,
+            hostname: hostname,
+          };
+          resolve(result);
+        } else {
+          dns.reverse(ip, (err, hostnames) => {
+            if (err || !hostnames || hostnames.length === 0) {
+              const result = {
+                ip: ip,
+                status: 'Online',
+                responseTime: responseTime,
+                hostname: null,
+              };
+              resolve(result);
+            } else {
+              const result = {
+                ip: ip,
+                status: 'Online',
+                responseTime: responseTime,
+                hostname: hostnames[0],
+              };
+              resolve(result);
+            }
+          });
+        }
+      } else {
+        const result = {
+          ip: ip,
+          status: 'Offline',
+          responseTime: null,
+          hostname: null,
+        };
+        resolve(result);
+      }
+    });
+  });
 }
